@@ -377,22 +377,68 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tiles[randomIndex + 1]) tiles[randomIndex + 1].classList.add('active');
   });
 
-  // ---- Export PNG ----
+  // ---- Export PNG (HD) ----
   exportGif.addEventListener('click', async () => {
     exportGif.disabled = true;
     const origText = exportGif.innerHTML;
     exportGif.textContent = 'Exporting...';
 
+    const cardRect = xpCard.getBoundingClientRect();
+    const hdScale = 2;
+
+    // Get the border radius value
+    const computedStyle = getComputedStyle(xpCard);
+    const borderRadius = parseFloat(computedStyle.borderRadius) || 14;
+    const scaledRadius = borderRadius * hdScale;
+
     try {
-      const canvas = await html2canvas(xpCard, {
+      // Store original styles
+      const origBorder = xpCard.style.border;
+      const origBoxShadow = xpCard.style.boxShadow;
+
+      // Temporarily remove border for clean export
+      xpCard.style.border = 'none';
+      xpCard.style.boxShadow = 'none';
+
+      // Capture with html2canvas
+      const rawCanvas = await html2canvas(xpCard, {
         backgroundColor: null,
-        scale: 2,
+        scale: hdScale,
         useCORS: true,
+        allowTaint: true,
         logging: false,
       });
+
+      // Restore styles
+      xpCard.style.border = origBorder;
+      xpCard.style.boxShadow = origBoxShadow;
+
+      // Create a new canvas with rounded corners and transparent background
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = rawCanvas.width;
+      finalCanvas.height = rawCanvas.height;
+      const ctx = finalCanvas.getContext('2d');
+
+      // Draw rounded rectangle clipping path
+      ctx.beginPath();
+      ctx.moveTo(scaledRadius, 0);
+      ctx.lineTo(finalCanvas.width - scaledRadius, 0);
+      ctx.quadraticCurveTo(finalCanvas.width, 0, finalCanvas.width, scaledRadius);
+      ctx.lineTo(finalCanvas.width, finalCanvas.height - scaledRadius);
+      ctx.quadraticCurveTo(finalCanvas.width, finalCanvas.height, finalCanvas.width - scaledRadius, finalCanvas.height);
+      ctx.lineTo(scaledRadius, finalCanvas.height);
+      ctx.quadraticCurveTo(0, finalCanvas.height, 0, finalCanvas.height - scaledRadius);
+      ctx.lineTo(0, scaledRadius);
+      ctx.quadraticCurveTo(0, 0, scaledRadius, 0);
+      ctx.closePath();
+      ctx.clip();
+
+      // Draw the captured card onto the clipped canvas
+      ctx.drawImage(rawCanvas, 0, 0);
+
       const link = document.createElement('a');
       link.download = currentTab === 'weekly' ? 'xp-card-weekly.png' : 'xp-card-cumulative.png';
-      link.href = canvas.toDataURL('image/png');
+      link.href = finalCanvas.toDataURL('image/png');
       link.click();
     } catch (err) {
       console.error('Export failed:', err);
